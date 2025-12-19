@@ -44,3 +44,14 @@ class MemoryStore:
             )
 
             conn.commit()
+
+    def record_ai_explanation(self, prompt_hash: str, response: str) -> None:
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute(
+                """
+                INSERT INTO ai_explanations (prompt_hash, response)
+                VALUES (?, ?)
+                """,
+                (prompt_hash, response),
+            )
+            conn.commit()

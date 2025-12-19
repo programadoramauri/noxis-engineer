@@ -70,3 +70,52 @@ def scan(
     print_human_results(results, console)
     if any(r.severity == "error" for r in results):
         raise typer.Exit(code=1)
+
+@app.command()
+def doctor(
+        path: Path = typer.Option(
+        Path("."),
+        "--path",
+        "-p",
+        help="Caminho do projeto (root).",
+        exists=True,
+        file_okay=False,
+        dir_okay=True,
+        resolve_path=True,
+    ),
+) -> None:
+    """
+    Verifica se o ambiente está adequado para o projeto.
+    """
+    workspace = Workspace(root=path)
+    orchestrator = Orchestrator()
+
+    results = orchestrator.doctor(workspace)
+
+    print_human_results(results, console)
+    if any(r.severity == "error" for r in results):
+        raise typer.Exit(code=1)
+
+@app.command("ai-explain")
+def ai_explain(
+        path: Path = typer.Option(
+            Path("."),
+            "--path",
+            "-p",
+            help="Caminho do projeto(root).",
+            exists=True,
+            file_okay=False,
+            dir_okay=True,
+            resolve_path=True,
+        )
+) -> None:
+    """
+    Explica o estado atual do projeto com base em scan e doctor.
+    """
+    workspace = Workspace(root=path)
+    orchestrator = Orchestrator()
+
+    explanation = orchestrator.ai_explain(workspace)
+
+    console.print("\n[bold cyan]AI Explanation[/bold cyan]\n")
+    console.print(explanation)
