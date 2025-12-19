@@ -1,0 +1,9 @@
+version: 0.1
+rules:
+  safe_mode: true
+  allow_repo_write: false
+  allowed_write_paths:
+    - ".noxis/"
+ai:
+  enabled: true
+  allow_code_generation: false

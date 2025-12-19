@@ -1,0 +1,17 @@
+[project]
+name = "noxis"
+version = "0.1.0"
+description = "Noxis - engineer companion (local-first)"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = ["typer<=0.16", "rich>=13.7", "pyyaml>=6.0"]
+
+[project.scripts]
+noxis = "noxis.cli.main:app"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
