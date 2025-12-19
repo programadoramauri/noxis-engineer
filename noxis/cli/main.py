@@ -46,3 +46,27 @@ def init(
     if any(r.severity == "error" for r in results):
         raise typer.Exit(code=1)
 
+
+@app.command()
+def scan(
+        path: Path = typer.Option(
+            Path("."),
+            "--path",
+            "-p",
+            help="Caminho do projeto (root).",
+            exists=True,
+            file_okay=False,
+            dir_okay=True,
+            resolve_path=True,
+        ),
+) -> None:
+    """
+    Analise o repositório e imprime um relatório do contexto (ProjectModel).
+    """
+    workspace = Workspace(root=path)
+    orchestrator = Orchestrator()
+
+    results = orchestrator.scan(workspace)
+    print_human_results(results, console)
+    if any(r.severity == "error" for r in results):
+        raise typer.Exit(code=1)

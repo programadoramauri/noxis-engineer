@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
+import json
 from pathlib import Path
 
 class MemoryStore:
@@ -32,4 +33,14 @@ class MemoryStore:
                 );
                 """
             )
+            conn.commit()
+
+    def record_run(self, command:str, payload: dict | None = None) -> None:
+        payload_json = json.dumps(payload or {}, ensure_ascii=False)
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute(
+                "INSERT INTO runs (command, payload_json) VALUES (?, ?)",
+                (command, payload_json),
+            )
+
             conn.commit()
