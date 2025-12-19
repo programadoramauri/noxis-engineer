@@ -74,6 +74,28 @@ class Orchestrator:
             project_model = discover_project(workspace.root)
         except Exception as exc: # noqa: BLE001
             return [Result.error("scan", f"Project discovery failed: {exc}")]
+        
+        # Persistir baseline do projeto (.noxis/project.yml)
+        try:
+            workspace.project_file.write_text(
+                project_model.to_yaml(),
+                encoding="utf-8"
+            )
+            results.append(
+                Result.info(
+                    "scan",
+                    "Updated .noxis/project.yml.",
+                    str(workspace.project_file),
+                )
+            )
+        except Exception as exc: # noqa BLE001
+            results.append(
+                Result.warn(
+                    "scan",
+                    f"Could not update project.yml: {exc}",
+                    str(workspace.project_file)
+                )
+            )
 
         # Resultados humanos (úteis no dia 1)
         langs = project_model.languages_detected or []
@@ -86,6 +108,26 @@ class Orchestrator:
         )
 
         results.append(Result.info("scan", f"Repo type: {project_model.repo_type}", project_model.root_path))
+
+        # Sinais detectados (arquivos-chave)
+        signals = project_model.signals or {}
+        if not signals:
+            results.append(
+                Result.warn(
+                    "scan",
+                    "No known project signals detected",
+                    project_model.root_path
+                )
+            )
+        else:
+            for group, items in signals.items():
+                results.append(
+                    Result.info(
+                        "scan",
+                        f"Signals[{group}]: {', '.join(items)}",
+                        project_model.root_path
+                    )
+                )
 
         # Persistência leve para auto-alimentação (histórico)
         try:
