@@ -3,6 +3,7 @@ from __future__ import annotations
 import sqlite3
 import json
 from pathlib import Path
+from typing import Any
 
 class MemoryStore:
     def __init__(self, db_path: Path) -> None:
@@ -93,3 +94,34 @@ class MemoryStore:
             return None
 
         return json.loads(row[0])
+
+    def get_recent_runs(self, command: str, limit: int = 5) -> list[dict[str, Any]]:
+        """
+        Retorna os últimos runs de um comando, mais recente primeiro.
+        """
+        with sqlite3.connect(self.db_path) as conn:
+            rows = conn.execute(
+                """
+                SELECT created_at, command, payload_json
+                FROM runs
+                WHERE command = ?
+                ORDER BY id DESC
+                LIMIT ?
+                """,
+                (command, limit),
+            ).fetchall()
+        out: list[dict[str, Any]] = []
+        for created_at, cmd, payload_json in rows:
+            try:
+                payload = json.loads(payload_json or "{}")
+            except Exception:
+                payload = {}
+            out.append(
+                {
+                    "created_at": created_at,
+                    "command": cmd,
+                    "payload": payload
+                }
+            )
+
+        return out

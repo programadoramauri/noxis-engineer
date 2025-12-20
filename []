@@ -1,0 +1,100 @@
+from __future__ import annotations
+
+from typing import Any
+
+
+def summarize_scan_changes(recent_scans: list[dict[str, Any]]) -> str:
+    """
+    Compara scan mais recente com o anterior e descreve mudanças relevantes.
+    Espera lista com scans mais recentes primeiro.
+    """
+
+    if len(recent_scans) < 2:
+        return "No previous scan to compare."
+
+    cur = recent_scans[0]["payload"]
+    prev = recent_scans[1]["payload"]
+
+    lines: list[str] = []
+
+    cur_langs = set(cur.get("languages_detected") or [])
+    prev_langs = set(prev.get("languages_detected") or [])
+    added_langs = sorted(cur_langs - prev_langs)
+    removed_langs = sorted(prev_langs - cur_langs)
+    if added_langs or removed_langs:
+        if added_langs:
+            lines.append(f"- Languages added: {', '.join(added_langs)}")
+        if removed_langs:
+            lines.append(f"- Languages removed: {', '.join(removed_langs)}")
+    else:
+        lines.append("- Languages: no change")
+    cur_signals = cur.get("signals") or {}
+    prev_signals = prev.get("signals") or {}
+    if cur_signals != prev_signals:
+        lines.append("- Signals changed:")
+        for key in sorted(set(cur_signals) | set(prev_signals)):
+            a = set(cur_signals.get(key) or [])
+            b = set(prev_signals.get(key) or [])
+            add = sorted(a - b)
+            rem = sorted(b - a)
+            if add or rem:
+                if add:
+                    lines.append(f"  - {key}: added {', '.join(add)}")
+                if rem:
+                    lines.append(f"  - {key}: removed {', '.join(rem)}")
+    else:
+        lines.append("- Signals: no change")
+    cur_repo = cur.get("repo_type")
+    prev_repo = prev.get("repo_type")
+    if cur_repo != prev_repo:
+        lines.append(f"- Repo type changed: {prev_repo} -> {cur_repo}")
+    else:
+        lines.append("- Repo type: no change")
+    return "\n".join(lines)
+
+
+def summarize_doctor_changes(recent_doctors: list[dict[str, Any]]) -> str:
+    """
+    Compara doctor mais recente com o anterior e descreve mudanças relevantes.
+    Espera lista com doctors mais recentes primeiro.
+    """
+    if len(recent_doctors) < 2:
+        return "No previous doctor to compare."
+
+    cur = recent_doctors[0]["payload"]
+    prev = recent_doctors[1]["payload"]
+
+    cur_msgs = set(_doctor_keyset(cur))
+    prev_msgs = set(_doctor_keyset(prev))
+
+    added = sorted(cur_msgs - prev_msgs)
+    removed = sorted(prev_msgs - cur_msgs)
+
+    lines: list[str] = []
+    if not added and not removed:
+        return "Doctor results: no change."
+
+    if added:
+        lines.append("- New doctor findings:")
+        for x in added[:10]:
+            lines.append(f"  - {x}")
+        if len(added) > 10:
+            lines.append(f"  - (+{len(added) - 10} more)")
+
+    if removed:
+        lines.added(" - Resolved/removed doctor findings:")
+        for x in removed[:10]:
+            lines.append(f"  - {x}")
+        if len(removed) > 10:
+            lines.append(f"  - (+{len(removed) - 10} more)")
+
+    return "\n".join(lines)
+
+
+def _doctor_keyset(payload: dict[str, Any]) -> list[str]:
+    out: list[str] = []
+    for r in payload.get("results") or []:
+        sev = (r.get("severity") or "info").upper()
+        msg = r.get("message") or ""
+        out.append(f"[{sev}] {msg}")
+    return out

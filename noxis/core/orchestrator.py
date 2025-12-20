@@ -16,15 +16,18 @@ from noxis.ai.provider import AIProvider
 from noxis.core.project_state import ProjectState
 from noxis.ai.context_builder import build_ai_context
 
+
 class Orchestrator:
-    def init_workspace(self, workspace: Workspace) -> list [Result]:
+    def init_workspace(self, workspace: Workspace) -> list[Result]:
         results: list[Result] = []
 
         # 1) Create .noxis/
         try:
             workspace.state_dir.mkdir(parents=True, exist_ok=True)
-            results.append(Result.info("init", "Created/verified .noxis directory.", str(workspace.state_dir)))
-        except Excetion as exc: # noqa: BLE001
+            results.append(
+                Result.info("init", "Created/verified .noxis directory.", str(workspace.state_dir))
+            )
+        except Exception as exc:  # noqa: BLE001
             return [Result.error("init", f"Failed to create .noxis directory: {exc}")]
 
         # 2) Write policies.yml (if missing)
@@ -40,13 +43,19 @@ class Orchestrator:
 
     def _ensure_policies(self, workspace: Workspace) -> list[Result]:
         if workspace.policies_file.exists():
-            return [Result.info("init", "policies.yml already exists.", str(workspace.policies_file))]
+            return [
+                Result.info("init", "policies.yml already exists.", str(workspace.policies_file))
+            ]
 
         try:
             default_yaml = load_default_policies_yaml()
             workspace.policies_file.write_text(default_yaml, encoding="utf-8")
-            return [Result.info("init", "Created policies.yml from defaults.", str(workspace.policies_file))]
-        except Exception as exc: # noqa: BLE001
+            return [
+                Result.info(
+                    "init", "Created policies.yml from defaults.", str(workspace.policies_file)
+                )
+            ]
+        except Exception as exc:  # noqa: BLE001
             return [Result.error("init", f"Failed to write policies.yml: {exc}")]
 
     def _write_project(self, workspace: Workspace) -> list[Result]:
@@ -54,8 +63,10 @@ class Orchestrator:
             project_model = discover_project(workspace.root)
             content = project_model.to_yaml()
             workspace.project_file.write_text(content, encoding="utf-8")
-            return [Result.info("init", "Created/updated project.yml.", str(workspace.project_file))]
-        except Exception as exc: # noqa: BLE001
+            return [
+                Result.info("init", "Created/updated project.yml.", str(workspace.project_file))
+            ]
+        except Exception as exc:  # noqa: BLE001
             return [Result.error("init", f"Failed to write project.yml: {exc}")]
 
     def _ensure_memory_db(self, workspace: Workspace) -> list[Result]:
@@ -63,27 +74,26 @@ class Orchestrator:
             store = MemoryStore(workspace.memory_db_file)
             store.initialize()
             return [Result.info("init", "initialize memory.db.", str(workspace.memory_db_file))]
-        except Exception as exc: # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001
             return [Result.error("init", f"Failed to initialize memory.db: {exc}")]
 
     def _doctor_python(self) -> list[Result]:
         results: list[Result] = []
 
-        #pip
+        # pip
         if shutil.which("pip"):
             results.append(
                 Result.info(
                     "doctor",
                     "pip is available.",
-                    shutil.which("pip",)
+                    shutil.which(
+                        "pip",
+                    ),
                 )
             )
         else:
             results.append(
-                Result.error(
-                    "doctor",
-                    "pip not found. Install pip to manage Python dependencies."
-                )
+                Result.error("doctor", "pip not found. Install pip to manage Python dependencies.")
             )
 
         if shutil.which("ruff"):
@@ -91,7 +101,9 @@ class Orchestrator:
                 Result.info(
                     "doctor",
                     "ruff is available.",
-                    shutil.which("ruff",)
+                    shutil.which(
+                        "ruff",
+                    ),
                 )
             )
         else:
@@ -108,7 +120,9 @@ class Orchestrator:
                 Result.info(
                     "doctor",
                     "pytest is available.",
-                    shutil.which("pytest",)
+                    shutil.which(
+                        "pytest",
+                    ),
                 )
             )
         else:
@@ -127,21 +141,18 @@ class Orchestrator:
         # Garante .noxis/ (scan pode ser rodado antes do init)
         try:
             workspace.state_dir.mkdir(parents=True, exist_ok=True)
-        except Exception as exc: # noqa BLE001
+        except Exception as exc:  # noqa BLE001
             return [Result.error("scan", f"Project discovery failed: {exc}")]
-        
+
         # Descoberta
         try:
             project_model = discover_project(workspace.root)
-        except Exception as exc: # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001
             return [Result.error("scan", f"Project discovery failed: {exc}")]
-        
+
         # Persistir baseline do projeto (.noxis/project.yml)
         try:
-            workspace.project_file.write_text(
-                project_model.to_yaml(),
-                encoding="utf-8"
-            )
+            workspace.project_file.write_text(project_model.to_yaml(), encoding="utf-8")
             results.append(
                 Result.info(
                     "scan",
@@ -149,12 +160,10 @@ class Orchestrator:
                     str(workspace.project_file),
                 )
             )
-        except Exception as exc: # noqa BLE001
+        except Exception as exc:  # noqa BLE001
             results.append(
                 Result.warn(
-                    "scan",
-                    f"Could not update project.yml: {exc}",
-                    str(workspace.project_file)
+                    "scan", f"Could not update project.yml: {exc}", str(workspace.project_file)
                 )
             )
 
@@ -168,32 +177,28 @@ class Orchestrator:
             )
         )
 
-        results.append(Result.info("scan", f"Repo type: {project_model.repo_type}", project_model.root_path))
+        results.append(
+            Result.info("scan", f"Repo type: {project_model.repo_type}", project_model.root_path)
+        )
 
         # Sinais detectados (arquivos-chave)
         signals = project_model.signals or {}
         if not signals:
             results.append(
-                Result.warn(
-                    "scan",
-                    "No known project signals detected",
-                    project_model.root_path
-                )
+                Result.warn("scan", "No known project signals detected", project_model.root_path)
             )
         else:
             for group, items in signals.items():
                 results.append(
                     Result.info(
-                        "scan",
-                        f"Signals[{group}]: {', '.join(items)}",
-                        project_model.root_path
+                        "scan", f"Signals[{group}]: {', '.join(items)}", project_model.root_path
                     )
                 )
 
         # Persistência leve para auto-alimentação (histórico)
         try:
             store = MemoryStore(workspace.memory_db_file)
-            store.initialize() #idempotente
+            store.initialize()  # idempotente
             store.record_run(
                 command="scan",
                 payload={
@@ -201,7 +206,7 @@ class Orchestrator:
                     "repo_type": project_model.repo_type,
                     "languages_detected": project_model.languages_detected,
                     "signals": project_model.signals,
-                }
+                },
             )
 
             store.set_state(
@@ -210,14 +215,22 @@ class Orchestrator:
                     "root_path": project_model.root_path,
                     "repo_type": project_model.repo_type,
                     "languages_detected": project_model.languages_detected,
-                    "signals": project_model.signals
-                }
+                    "signals": project_model.signals,
+                },
             )
-            
-            results.append(Result.info("scan", "Recorded scan run in memory.db", str(workspace.memory_db_file)))
-        except Exception as exc: # noqa: BLE001
+
+            results.append(
+                Result.info("scan", "Recorded scan run in memory.db", str(workspace.memory_db_file))
+            )
+        except Exception as exc:  # noqa: BLE001
             # não falha o scan por telemetria local
-            results.append(Result.warn("scan", f"Could not record run in memory.db: {exc}", str(workspace.memory_db_file)))
+            results.append(
+                Result.warn(
+                    "scan",
+                    f"Could not record run in memory.db: {exc}",
+                    str(workspace.memory_db_file),
+                )
+            )
         return results
 
     def doctor(self, workspace: Workspace) -> list[Result]:
@@ -246,19 +259,17 @@ class Orchestrator:
                 Result.warn(
                     "doctor",
                     "No project.yml found. Run `noxis scan` first.",
-                    str(workspace.project_file)
+                    str(workspace.project_file),
                 )
             )
             return results
 
         try:
             project_yaml = workspace.project_file.read_text(encoding="utf-8")
-        except Exception as exc: # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001
             results.append(
                 Result.error(
-                    "doctor",
-                    f"Failed to read project.yml: {exc}",
-                    str(workspace.project_file)
+                    "doctor", f"Failed to read project.yml: {exc}", str(workspace.project_file)
                 )
             )
         # Heuristica simples: detectar python no baseline
@@ -270,19 +281,29 @@ class Orchestrator:
             "last_doctor",
             {
                 "results": [
-                    {
-                        "severity": r.severity,
-                        "message": r.message,
-                        "location": r.location
-                    }
+                    {"severity": r.severity, "message": r.message, "location": r.location}
+                    for r in results
+                ]
+            },
+        )
+
+        try:
+            store = MemoryStore(workspace.memory_db_file)
+            store.initialize()
+            payload = {
+                "results": [
+                    {"severity": r.severity, "message": r.message, "location": r.location}
                     for r in results
                 ]
             }
-        )
+            store.record_run("doctor", payload=payload)
+            store.set_state("last_doctor", payload)
+        except Exception:
+            pass
 
         return results
 
-    def ai_explain(self, workspace:Workspace) -> str:
+    def ai_explain(self, workspace: Workspace) -> str:
         # 1. Garantir baseline
         if not workspace.project_file.exists():
             raise RuntimeError("project.yml not found. Run `noxis scan` first.")
@@ -290,13 +311,20 @@ class Orchestrator:
         store = MemoryStore(workspace.memory_db_file)
         store.initialize()
 
+        recent_scans = store.get_recent_runs("scan", limit=3)
+        recent_doctors = store.get_recent_runs("doctor", limit=3)
         state = ProjectState(store)
 
         scan_state = state.last_scan()
         doctor_state = state.last_doctor()
 
         # 4. Construir contexto para IA
-        prompt = build_ai_context(scan_state=scan_state, doctor_state=doctor_state)
+        prompt = build_ai_context(
+            scan_state=scan_state,
+            doctor_state=doctor_state,
+            scan_history=recent_scans,
+            doctor_history=recent_doctors,
+        )
 
         # 5. Chamar provider
         provider = AIProvider()
@@ -309,10 +337,7 @@ class Orchestrator:
 
             prompt_hash = hashlib.sha256(prompt.encode("utf-8")).hexdigest()
 
-            store.record_ai_explanation(
-                prompt_hash=prompt_hash,
-                response=response
-            )
+            store.record_ai_explanation(prompt_hash=prompt_hash, response=response)
         except Exception:
             # IA nunca quebra fluxo principal
             pass

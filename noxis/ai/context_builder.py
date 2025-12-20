@@ -6,11 +6,10 @@ from typing import Any
 
 from noxis.core.results import Result
 from noxis.context.model import ProjectModel
+from noxis.ai.history import summarize_scan_changes, summarize_doctor_changes
 
-def build_ai_context(
-    scan_state: dict[str, Any] | None,
-    doctor_state: dict[str, Any] | None,
-) -> str:
+
+def build_ai_context(scan_state, doctor_state, scan_history, doctor_history) -> str:
     """
     Constrói um contexto enxuto e factual para IA.
 
@@ -50,7 +49,6 @@ def build_ai_context(
                 lines.append(f"- {group}: {joined}")
             lines.append("")
 
-
     # --- Doctor state ---
     if not doctor_state:
         lines.append("Doctor checks: NOT AVAILABLE")
@@ -72,7 +70,13 @@ def build_ai_context(
                     lines.append(f"- [{sev}] {msg}")
         lines.append("")
 
-    lines.append(
-        "Now explain the situation and recommend next steps."
-    )
+    lines.append("Change summary (most recent vs previous):")
+    lines.append("Scan changes:")
+    lines.append(summarize_scan_changes(scan_history))
+    lines.append("")
+    lines.append("Doctor changes:")
+    lines.append(summarize_doctor_changes(doctor_history))
+    lines.append("")
+
+    lines.append("Now explain the situation and recommend next steps.")
     return "\n".join(lines)
