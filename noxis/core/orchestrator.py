@@ -13,6 +13,7 @@ from noxis.policies.loader import load_default_policies_yaml
 from noxis.storage.memory import MemoryStore
 from noxis.core.workspace import Workspace
 from noxis.ai.provider import AIProvider
+from noxis.core.project_state import ProjectState
 from noxis.ai.context_builder import build_ai_context
 
 class Orchestrator:
@@ -202,6 +203,16 @@ class Orchestrator:
                     "signals": project_model.signals,
                 }
             )
+
+            store.set_state(
+                "last_scan",
+                {
+                    "root_path": project_model.root_path,
+                    "repo_type": project_model.repo_type,
+                    "languages_detected": project_model.languages_detected,
+                    "signals": project_model.signals
+                }
+            )
             
             results.append(Result.info("scan", "Recorded scan run in memory.db", str(workspace.memory_db_file)))
         except Exception as exc: # noqa: BLE001
@@ -254,6 +265,21 @@ class Orchestrator:
         if "python" in project_yaml:
             results.extend(self._doctor_python())
 
+        store = MemoryStore(workspace.memory_db_file)
+        store.set_state(
+            "last_doctor",
+            {
+                "results": [
+                    {
+                        "severity": r.severity,
+                        "message": r.message,
+                        "location": r.location
+                    }
+                    for r in results
+                ]
+            }
+        )
+
         return results
 
     def ai_explain(self, workspace:Workspace) -> str:
@@ -261,14 +287,16 @@ class Orchestrator:
         if not workspace.project_file.exists():
             raise RuntimeError("project.yml not found. Run `noxis scan` first.")
 
-        # 2. Carregar ProjectModel
-        project = discover_project(workspace.root)
+        store = MemoryStore(workspace.memory_db_file)
+        store.initialize()
 
-        # 3. Rodar doctor (deterministico)
-        doctor_results = self.doctor(workspace)
+        state = ProjectState(store)
+
+        scan_state = state.last_scan()
+        doctor_state = state.last_doctor()
 
         # 4. Construir contexto para IA
-        prompt = build_ai_context(project, doctor_results)
+        prompt = build_ai_context(scan_state=scan_state, doctor_state=doctor_state)
 
         # 5. Chamar provider
         provider = AIProvider()
