@@ -33,7 +33,7 @@ class AIProvider:
             "Explain is not implemented with the model yet.\n\n"
             "Prompt received:\n"
             "----------------\n"
-            "f{prompt}"
+            f"{prompt}"
         )
 
     def generate_tests(self, prompt: str) -> dict[str, str]:
