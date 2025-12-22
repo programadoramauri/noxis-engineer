@@ -5,12 +5,16 @@ from pathlib import Path
 import typer
 from rich.console import Console
 
+from noxis.core import workspace
+from noxis.core import orchestrator
+from noxis.core import results
 from noxis.core.orchestrator import Orchestrator
 from noxis.core.results import print_human_results
 from noxis.core.workspace import Workspace
 
 app = typer.Typer(no_args_is_help=True, add_completion=False)
 console = Console()
+
 
 @app.callback()
 def main() -> None:
@@ -20,18 +24,19 @@ def main() -> None:
     # Callback raiz: não faz nada por enquanto
     pass
 
+
 @app.command()
 def init(
-        path: Path = typer.Option(
-            Path("."),
-            "--path",
-            "-p",
-            help="Caminho do projeto (root)",
-            exists=True,
-            file_okay=False,
-            dir_okay=True,
-            resolve_path=True
-        )
+    path: Path = typer.Option(
+        Path("."),
+        "--path",
+        "-p",
+        help="Caminho do projeto (root)",
+        exists=True,
+        file_okay=False,
+        dir_okay=True,
+        resolve_path=True,
+    ),
 ) -> None:
     """
     Inicializa a Noxis no repositório alvo criando .noxis/ com project.yml, policies.yml e memory.db.
@@ -49,16 +54,16 @@ def init(
 
 @app.command()
 def scan(
-        path: Path = typer.Option(
-            Path("."),
-            "--path",
-            "-p",
-            help="Caminho do projeto (root).",
-            exists=True,
-            file_okay=False,
-            dir_okay=True,
-            resolve_path=True,
-        ),
+    path: Path = typer.Option(
+        Path("."),
+        "--path",
+        "-p",
+        help="Caminho do projeto (root).",
+        exists=True,
+        file_okay=False,
+        dir_okay=True,
+        resolve_path=True,
+    ),
 ) -> None:
     """
     Analise o repositório e imprime um relatório do contexto (ProjectModel).
@@ -71,9 +76,10 @@ def scan(
     if any(r.severity == "error" for r in results):
         raise typer.Exit(code=1)
 
+
 @app.command()
 def doctor(
-        path: Path = typer.Option(
+    path: Path = typer.Option(
         Path("."),
         "--path",
         "-p",
@@ -96,18 +102,19 @@ def doctor(
     if any(r.severity == "error" for r in results):
         raise typer.Exit(code=1)
 
+
 @app.command("ai-explain")
 def ai_explain(
-        path: Path = typer.Option(
-            Path("."),
-            "--path",
-            "-p",
-            help="Caminho do projeto(root).",
-            exists=True,
-            file_okay=False,
-            dir_okay=True,
-            resolve_path=True,
-        )
+    path: Path = typer.Option(
+        Path("."),
+        "--path",
+        "-p",
+        help="Caminho do projeto(root).",
+        exists=True,
+        file_okay=False,
+        dir_okay=True,
+        resolve_path=True,
+    ),
 ) -> None:
     """
     Explica o estado atual do projeto com base em scan e doctor.
@@ -119,3 +126,15 @@ def ai_explain(
 
     console.print("\n[bold cyan]AI Explanation[/bold cyan]\n")
     console.print(explanation)
+
+
+@app.command("ai-tests")
+def ai_tests(
+    path: Path = typer.Option(Path("."), "--path", "-p", help="Project root path"),
+):
+    workspace = Workspace(root=path)
+    orchestrator = Orchestrator()
+    results = orchestrator.ai_tests(workspace)
+
+    for r in results:
+        console.print(r.to_rich())

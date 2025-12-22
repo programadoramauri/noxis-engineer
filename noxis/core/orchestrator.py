@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path
+import shutil
 
 from noxis.ai.context_builder import build_ai_context
 from noxis.ai.provider import AIProvider
 from noxis.context.discovery import discover_project
+from noxis.core import results
 from noxis.core.project_state import ProjectState
 from noxis.core.results import Result
 from noxis.core.workspace import Workspace
@@ -13,6 +15,7 @@ from noxis.policies.loader import load_default_policies_yaml
 from noxis.storage.memory import MemoryStore
 from noxis.plugins.manager import PluginManager
 from noxis.plugins.base import ActionRequest
+from noxis.context.loader import load_project
 
 
 class Orchestrator:
@@ -208,7 +211,7 @@ class Orchestrator:
             return [Result.error("doctor", f"Failed to create .noxis directory: {exc}")]
 
         try:
-            project = discover_project(workspace.root)
+            project = load_project(workspace.root)
         except Exception as exc:  # noqa: BLE001
             return [Result.error("doctor", f"Project discovery failed: {exc}")]
 
@@ -275,6 +278,7 @@ class Orchestrator:
     # ---------------------------------------------------------------------
 
     def ai_explain(self, workspace: Workspace) -> str:
+        project = load_project(workspace.root)
         if not workspace.project_file.exists():
             raise RuntimeError("project.yml not found. Run `noxis scan` first.")
 
@@ -305,3 +309,128 @@ class Orchestrator:
             pass
 
         return response
+
+    def ai_tests(self, workspace: Workspace) -> list[Result]:
+        results: list[Result] = []
+
+        # 1. Garantir baseline
+        if not workspace.project_file.exists():
+            return [Result.error("ai-tests", "project.yml not found. Run `noxis scan first.`")]
+
+        # 2. Carregar ProjectModel
+        from noxis.context.loader import load_project
+
+        project = load_project(workspace.root)
+
+        if "python" not in (project.languages_detected or []):
+            return [
+                Result.warn(
+                    "ai-tests",
+                    "AI test generation is only supported for Python projects (for now).",
+                )
+            ]
+
+        # 3. Verificar pytest
+        if not shutil.which("pytest"):
+            return [
+                Result.error(
+                    "ai-tests",
+                    "pytest not found. Install pytest before generating tests.",
+                )
+            ]
+
+        # 4. Descobrir código testável
+        src_dirs = self._discover_python_sources(workspace.root)
+        if not src_dirs:
+            return [
+                Result.warn(
+                    "ai-tests",
+                    "No Python source directories found to generate tests for.",
+                )
+            ]
+
+        # 5, Construir prompt
+        prompt = self._build_ai_tests_prompt(project, src_dirs)
+
+        # 6. Chamar IA
+        provider = AIProvider()
+        generated = provider.generate_tests(prompt)
+
+        # 7. Escrever arquivos
+        tests_dir = workspace.root / "tests"
+        tests_dir.mkdir(exists_ok=True)
+
+        written_files = []
+        for fname, content in generated.items():
+            path = tests_dir / fname
+
+            path.write_text(content, encoding="utf-8")
+            written_files.append(str(path))
+
+        results.append(
+            Result.info(
+                "ai-tests",
+                f"Generated {len(written_files)} test files.",
+                ", ".join(written_files),
+            )
+        )
+
+        # 8. Executar pytest
+        import subprocess
+
+        proc = subprocess.run(
+            ["pytest", "-q"],
+            cwd=str(workspace.root),
+            capture_output=True,
+            text=True,
+        )
+
+        if proc.returncode != 0:
+            results.append(
+                Result.error(
+                    "ai-tests",
+                    "Generated tests failed.",
+                    proc.stdout + "\n" + proc.stderr,
+                )
+            )
+            return results
+        results.append(Result.info("ai-tests", "All generated tests passed."))
+
+        # 9. Persistir histórico
+        try:
+            store = MemoryStore(workspace.memory_db_file)
+            store.initialize()
+            store.record_run(
+                "ai-tests", payload={"generated_files": written_files, "sources": src_dirs}
+            )
+        except Exception:
+            pass
+
+        return results
+
+    def _discover_python_sources(self, root: Path) -> list[str]:
+        candidates = []
+        for p in root.iterdir():
+            if p.is_dir() and p.name in {"src", "app"}:
+                candidates.append(str(p))
+        return candidates
+
+    def _build_ai_tests_prompt(self, project, src_dirs: list[str]) -> str:
+        lines = [
+            "You are an expert Python test engineer.",
+            "Generate pytest tests for the following project.",
+            "",
+            f"Project root: {project.root_path}",
+            f"Source directories: {', '.join(src_dirs)}",
+            "",
+            "Rules",
+            "- Do NOT modify production code",
+            "- Write only pytest-compatible tests",
+            "- Prefer simple, deterministic tests",
+            "- Use mocks when necessary",
+            "- Assume code is correct: test expected behavior",
+            "",
+            "Return files as JSON mapping filename -> content.",
+        ]
+
+        return "\n".join(lines)
