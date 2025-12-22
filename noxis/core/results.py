@@ -54,7 +54,7 @@ def print_human_results(results: list[Result], console: Console) -> None:
     table = Table(title="Noxis Results", show_lines=False)
     table.add_column("Severity", no_wrap=True)
     table.add_column("Type", no_wrap=True)
-    table.add_column("message")
+    table.add_column("Message")
     table.add_column("Location")
 
     for r in results:

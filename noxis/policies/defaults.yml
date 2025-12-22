@@ -4,6 +4,13 @@ rules:
   allow_repo_write: false
   allowed_write_paths:
     - ".noxis/"
+    - "tests/"
 ai:
   enabled: true
-  allow_code_generation: false
+  allow_code_generation: true
+  provider: local_http
+  local_http:
+    base_url: "http://127.0.0.1:11434"
+    endpoint: "/api/generate"
+    model: "qwen2.5-coder:7b"
+    timeout_seconds: 120

@@ -345,7 +345,7 @@ class Orchestrator:
             return [
                 Result.warn(
                     "ai-tests",
-                    "No Python source directories found to generate tests for.",
+                    "No Python source directories found. Expected at least one package or module directory.",
                 )
             ]
 
@@ -358,7 +358,7 @@ class Orchestrator:
 
         # 7. Escrever arquivos
         tests_dir = workspace.root / "tests"
-        tests_dir.mkdir(exists_ok=True)
+        tests_dir.mkdir(exist_ok=True)
 
         written_files = []
         for fname, content in generated.items():
@@ -409,11 +409,22 @@ class Orchestrator:
         return results
 
     def _discover_python_sources(self, root: Path) -> list[str]:
-        candidates = []
-        for p in root.iterdir():
-            if p.is_dir() and p.name in {"src", "app"}:
-                candidates.append(str(p))
-        return candidates
+        ignore = {".venv", "venv", "__pycache__", ".noxis", ".git", "tests", "dist", "build"}
+
+        sources: list[str] = []
+
+        for item in root.iterdir():
+            if not item.is_dir():
+                continue
+            if item.name in ignore:
+                continue
+
+            has_py_files = any(p.suffix == ".py" for p in item.glob("*.py"))
+            has_init = (item / "__init__.py").exists()
+
+            if has_py_files or has_init:
+                sources.append(str(item))
+        return sources
 
     def _build_ai_tests_prompt(self, project, src_dirs: list[str]) -> str:
         lines = [
