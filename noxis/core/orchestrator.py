@@ -4,7 +4,7 @@ from noxis.core.results import Result
 from noxis.core.workspace import Workspace
 from noxis.services.init_service import InitService
 
-from noxis.services.ai_tests_service import AITestsService
+from noxis.services.ai_tests import AITestsService
 from noxis.services.scan_service import ScanService
 from noxis.services.doctor_service import DoctorService
 from noxis.services.ai_explain_service import AIExplainService
