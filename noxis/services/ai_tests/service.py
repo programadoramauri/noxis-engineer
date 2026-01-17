@@ -12,6 +12,7 @@ from .source_discovery import PythonSourceDiscovery
 from .prompt_builder import AITestsPromptBuilder
 from .writer import TestFileWriter
 from .pytest_runner import PytestRunner
+from .repair_loop import AITestRepairLoop
 
 
 class AITestsService:
@@ -21,6 +22,7 @@ class AITestsService:
         self.writer = TestFileWriter()
         self.pytest = PytestRunner()
         self.provider = AIProvider()
+        self.repair = AITestRepairLoop(self.provider)
 
     def run(self, workspace: Workspace) -> list[Result]:
         if not workspace.project_file.exists():
@@ -33,11 +35,10 @@ class AITestsService:
         if not shutil.which("pytest"):
             return [Result.error("ai-tests", "pytest not found")]
 
-        py_files = self.discovery.discover_files(workspace.root)
-        if not py_files:
-            return [Result.warn("ai-tests", "No Python source directories found.")]
+        target = self.discovery.discover_best_file(workspace.root)
+        if not target:
+            return [Result.warn("ai-tests", "No suitable Python file found to generate tests for.")]
 
-        target = py_files[0]  # MVP: exatamente 1 arquivo
         test_filename = self._test_filename_for_target(target, workspace.root)
 
         prompt = self.prompt_builder.build_for_file(
@@ -59,8 +60,33 @@ class AITestsService:
             return [Result.error("ai-tests", str(exc))]
 
         ok, output = self.pytest.run(workspace.root)
+
+        attempts = 0
+        while not ok and attempts < self.repair.max_attempts:
+            attempts += 1
+
+            repaired = self.repair.attempt_repair(
+                project=project,
+                target_file=target,
+                test_file=Path(written[0]),
+                pytest_error=output,
+                root=workspace.root,
+            )
+
+            if not repaired:
+                break
+
+            self.writer.write(workspace.root, repaired)
+            ok, output = self.pytest.run(workspace.root)
+
         if not ok:
-            return [Result.error("ai-tests", "Generated tests failed.", output)]
+            return [
+                Result.error(
+                    "ai-tests",
+                    f"Tests failed after {attempts} repair attempt(s).",
+                    output,
+                )
+            ]
 
         self._persist_run(workspace, written, target)
 
