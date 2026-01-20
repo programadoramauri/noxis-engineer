@@ -13,6 +13,8 @@ from .prompt_builder import AITestsPromptBuilder
 from .writer import TestFileWriter
 from .pytest_runner import PytestRunner
 from .repair_loop import AITestRepairLoop
+from .target_history import AITestsTargetHistory
+from .target_registry import AITestTargetRegistry
 
 
 class AITestsService:
@@ -29,15 +31,27 @@ class AITestsService:
             return [Result.error("ai-tests", "project.yml not found. Run `noxis scan` first.")]
         project = load_project(workspace.root)
 
+        store = MemoryStore(workspace.memory_db_file)
+        store.initialize()
+        registry = AITestTargetRegistry(store)
+
+        history = AITestsTargetHistory(store)
+        already_tested = history.already_tested()
+
         if "python" not in (project.languages_detected or []):
             return [Result.warn("ai-tests", "Only Python projects are supported.")]
 
         if not shutil.which("pytest"):
             return [Result.error("ai-tests", "pytest not found")]
 
-        target = self.discovery.discover_best_file(workspace.root)
+        target = self._select_target(workspace.root, registry)
         if not target:
-            return [Result.warn("ai-tests", "No suitable Python file found to generate tests for.")]
+            return [
+                Result.warn(
+                    "ai-tests",
+                    "No new Python files available for test generation.",
+                )
+            ]
 
         test_filename = self._test_filename_for_target(target, workspace.root)
 
@@ -90,6 +104,8 @@ class AITestsService:
 
         self._persist_run(workspace, written, target)
 
+        registry.mark_tested(target)
+
         return [
             Result.info(
                 "ai-tests", f"Generated and validated {len(written)} test files.", written[0]
@@ -110,3 +126,12 @@ class AITestsService:
             )
         except Exception:
             pass
+
+    def _select_target(self, root: Path, registry: AITestTargetRegistry) -> Path | None:
+        ranked = self.discovery.discover_ranked_files(root)
+
+        for candidate in ranked:
+            if not registry.is_tested(candidate):
+                return candidate
+
+        return None
