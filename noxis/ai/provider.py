@@ -37,17 +37,13 @@ class AIProvider:
         )
 
     def generate_tests(self, prompt: str) -> dict[str, str]:
-        """
-        Returns {filename: content}
-        """
+        raw = self._call_local_model(prompt)
 
-        try:
-            raw = self._call_local_model(prompt)
-            payload = self._parse_json_mapping(raw)
-            self._validate_tests_mapping(payload)
-            return payload
-        except Exception:
-            return self._fallback_tests()
+        payload = self._parse_json_mapping(raw)
+        payload = self._normalize_test_filenames(payload)
+        self._validate_tests_mapping(payload)
+
+        return payload
 
     def _call_local_model(self, prompt: str) -> str:
         cfg = self.config
@@ -95,25 +91,36 @@ class AIProvider:
 
     def _parse_json_mapping(self, raw: str) -> dict[str, str]:
         """
-        Espera um JSON objeto: {"test_x.py": "...", ...}
-        Se vier texto com JSON "embutido", extrai o primeiro bloco JSON.
+        Tolerant parser for LLM outputs.
+        Accepts:
+        - Proper JSON {filename: "code"}
+        - JSON with non-string values
+        - ```json fences
+        - Plain text fallback
         """
         raw = raw.strip()
 
-        # 1) se já for JSON puro
+        # 1) tentar JSON puro
         try:
             parsed = json.loads(raw)
-            if isinstance(parsed, dict):
-                return {str(k): str(v) for k, v in parsed.items()}
+            return self._coerce_mapping(parsed)
         except Exception:
             pass
 
-        # 2) extrair bloco JSON dentro do texto (inclusive em ```json ... ```)
-        candidate = self._extract_first_json_object(raw)
-        parsed = json.loads(candidate)
-        if not isinstance(parsed, dict):
-            raise ValueError("Model output JSON is not an object mapping filename->content")
-        return {str(k): str(v) for k, v in parsed.items()}
+        # 2) tentar extrair bloco JSON
+        try:
+            candidate = self._extract_first_json_object(raw)
+            parsed = json.loads(candidate)
+            return self._coerce_mapping(parsed)
+        except Exception:
+            pass
+
+        # 3) fallback heurístico: tentar extrair código direto
+        code = self._extract_code_block(raw)
+        if code:
+            return {"test_generated.py": code}
+
+        raise ValueError("Could not extract any test content from model output")
 
     def _extract_first_json_object(self, text: str) -> str:
         # tenta pegar dentro de ```json ... ```
@@ -183,3 +190,51 @@ class AIProvider:
 
     def _fallback_tests(self) -> dict[str, str]:
         return {"test_smoke.py": "def test_smoke():\n   assert True\n"}
+
+    def _normalize_test_filenames(self, mapping: dict[str, str]) -> dict[str, str]:
+        """
+        Ollama costuma devolver paths completos (ex: tests/foo/bar.py).
+        A Noxis exige filenames simples.
+        """
+        normalized: dict[str, str] = {}
+
+        for name, content in mapping.items():
+            filename = Path(name).name  # remove qualquer path
+            if not filename.startswith("test_"):
+                filename = f"test_{filename}"
+            normalized[filename] = content
+
+        return normalized
+
+    def _coerce_mapping(self, parsed: Any) -> dict[str, str]:
+        if not isinstance(parsed, dict):
+            raise ValueError("Model output is not a mapping")
+
+        result: dict[str, str] = {}
+
+        for k, v in parsed.items():
+            filename = str(k)
+
+            if isinstance(v, str):
+                content = v
+            elif isinstance(v, dict):
+                # junta valores do dict como código
+                content = "\n".join(str(x) for x in v.values())
+            else:
+                content = str(v)
+
+            result[filename] = content
+
+        return result
+
+    def _extract_code_block(self, text: str) -> str | None:
+        # tenta ```python ... ```
+        fence = re.search(r"```(?:python)?\s*(.*?)```", text, flags=re.DOTALL)
+        if fence:
+            return fence.group(1).strip()
+
+        # fallback: se parece código pytest
+        if "def test_" in text:
+            return text
+
+        return None

@@ -1,7 +1,7 @@
 version: 0.1
 rules:
   safe_mode: true
-  allow_repo_write: false
+  allow_repo_write: true
   allowed_write_paths:
     - ".noxis/"
     - "tests/"

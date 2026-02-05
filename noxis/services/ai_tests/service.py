@@ -13,7 +13,6 @@ from .prompt_builder import AITestsPromptBuilder
 from .writer import TestFileWriter
 from .pytest_runner import PytestRunner
 from .repair_loop import AITestRepairLoop
-from .target_history import AITestsTargetHistory
 from .target_registry import AITestTargetRegistry
 
 
@@ -26,17 +25,11 @@ class AITestsService:
         self.provider = AIProvider()
         self.repair = AITestRepairLoop(self.provider)
 
-    def run(self, workspace: Workspace) -> list[Result]:
+    def run(self, workspace: Workspace, *, force: bool = False) -> list[Result]:
+        results: list[Result] = []
         if not workspace.project_file.exists():
             return [Result.error("ai-tests", "project.yml not found. Run `noxis scan` first.")]
         project = load_project(workspace.root)
-
-        store = MemoryStore(workspace.memory_db_file)
-        store.initialize()
-        registry = AITestTargetRegistry(store)
-
-        history = AITestsTargetHistory(store)
-        already_tested = history.already_tested()
 
         if "python" not in (project.languages_detected or []):
             return [Result.warn("ai-tests", "Only Python projects are supported.")]
@@ -44,7 +37,11 @@ class AITestsService:
         if not shutil.which("pytest"):
             return [Result.error("ai-tests", "pytest not found")]
 
-        target = self._select_target(workspace.root, registry)
+        store = MemoryStore(workspace.memory_db_file)
+        store.initialize()
+        registry = AITestTargetRegistry(store)
+
+        target = self._select_target(workspace.root, registry, force=force)
         if not target:
             return [
                 Result.warn(
@@ -52,6 +49,14 @@ class AITestsService:
                     "No new Python files available for test generation.",
                 )
             ]
+
+        if force:
+            results.append(
+                Result.info(
+                    "ai-tests",
+                    "Force mode enabled: regenerating tests for an already tested target.",
+                )
+            )
 
         test_filename = self._test_filename_for_target(target, workspace.root)
 
@@ -102,9 +107,8 @@ class AITestsService:
                 )
             ]
 
-        self._persist_run(workspace, written, target)
-
         registry.mark_tested(target)
+        self._persist_run(workspace, written, target)
 
         return [
             Result.info(
@@ -127,8 +131,16 @@ class AITestsService:
         except Exception:
             pass
 
-    def _select_target(self, root: Path, registry: AITestTargetRegistry) -> Path | None:
+    def _select_target(
+        self, root: Path, registry: AITestTargetRegistry, *, force: bool
+    ) -> Path | None:
         ranked = self.discovery.discover_ranked_files(root)
+
+        if not ranked:
+            return None
+
+        if force:
+            return ranked[0]
 
         for candidate in ranked:
             if not registry.is_tested(candidate):

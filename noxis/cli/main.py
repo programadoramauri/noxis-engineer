@@ -131,10 +131,13 @@ def ai_explain(
 @app.command("ai-tests")
 def ai_tests(
     path: Path = typer.Option(Path("."), "--path", "-p", help="Project root path"),
+    force: bool = typer.Option(
+        False, "--force", help="Force re-generation of tests for already tested files."
+    ),
 ):
     workspace = Workspace(root=path)
     orchestrator = Orchestrator()
-    results = orchestrator.ai_tests(workspace)
+    results = orchestrator.ai_tests(workspace, force=force)
 
     for r in results:
         console.print(r.to_rich())

@@ -57,7 +57,7 @@ class AITestRepairLoop:
         return "\n".join(
             [
                 "You are an expert Python test engineer.",
-                "The following pytest FAILED.Fix the test WITHOUT modifying production code.",
+                "The following pytest FAILED. Fix the test WITHOUT modifying production code.",
                 "",
                 "Rules:",
                 "- Do NOT change production code",

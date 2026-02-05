@@ -23,5 +23,5 @@ class Orchestrator:
     def ai_explain(self, workspace: Workspace) -> str:
         return AIExplainService().run(workspace)
 
-    def ai_tests(self, workspace: Workspace) -> list[Result]:
-        return AITestsService().run(workspace)
+    def ai_tests(self, workspace: Workspace, *, force: bool = False) -> list[Result]:
+        return AITestsService().run(workspace, force=force)
